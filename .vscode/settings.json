@@ -1,0 +1,15 @@
+{
+    "C_Cpp.intelliSenseEngine": "default",
+    "idf.espIdfPathWin": "c:\\esp\\v5.3\\esp-idf",
+    "idf.openOcdConfigs": [
+        "board/esp32-wrover-kit-3.3v.cfg"
+    ],
+    "idf.toolsPathWin": "c:\\espressif",
+    "idf.portWin": "COM3",
+    "idf.flashType": "UART",
+    "files.associations": {
+        "*.embeddedhtml": "html",
+        "rifd_handler.h": "c",
+        "rc522_picc.h": "c"
+    }
+}
