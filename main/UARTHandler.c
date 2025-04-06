@@ -5,7 +5,7 @@
 #include <driver/uart.h>
 #include <string.h>
 #include "RIFD_Handler.h"
-#define UART_PORT   1
+
 #define RX_BUF_SIZE     1024
 #define TXD_PIN         5
 #define RXD_PIN         4

@@ -9,7 +9,11 @@
 #include "esp_log.h"
 #include "driver/mcpwm_prelude.h"
 #include "Global.h"
-static const char *TAG = "example";
+#include "Pwm_servo.h"
+#include "RIFD_Handler.h"
+static const char *TAG = "PWM_SERVO";
+extern bool card_present;
+extern bool card_valid;
 
 // Please consult the datasheet of your servo before changing the following parameters
 #define SERVO_MIN_PULSEWIDTH_US 500  // Minimum pulse width in microsecond
@@ -17,7 +21,7 @@ static const char *TAG = "example";
 #define SERVO_MIN_DEGREE        -90   // Minimum angle
 #define SERVO_MAX_DEGREE        90    // Maximum angle
 
-#define SERVO_PULSE_GPIO             0        // GPIO connects to the PWM signal line
+#define SERVO_PULSE_GPIO             2        // GPIO connects to the PWM signal line
 #define SERVO_TIMEBASE_RESOLUTION_HZ 1000000  // 1MHz, 1us per tick
 #define SERVO_TIMEBASE_PERIOD        20000    // 20000 ticks, 20ms
 
@@ -45,7 +49,7 @@ mcpwm_generator_config_t generator_config = {
     .gen_gpio_num = SERVO_PULSE_GPIO,
 };
 
-static inline uint32_t example_angle_to_compare(int angle)
+static inline uint32_t angle_to_compare(int angle)
 {
     return (angle - SERVO_MIN_DEGREE) * (SERVO_MAX_PULSEWIDTH_US - SERVO_MIN_PULSEWIDTH_US) / (SERVO_MAX_DEGREE - SERVO_MIN_DEGREE) + SERVO_MIN_PULSEWIDTH_US;
 }
@@ -75,7 +79,7 @@ void servo_initial(void)
     ESP_ERROR_CHECK(mcpwm_new_generator(oper, &generator_config, &generator));
 
     // set the initial compare value, so that the servo will spin to the center position
-    ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(comparator, example_angle_to_compare(0)));
+    ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(comparator, angle_to_compare(0)));
 
     ESP_LOGI(TAG, "Set generator action on timer and compare event");
     // go high on counter empty
@@ -90,18 +94,59 @@ void servo_initial(void)
     ESP_ERROR_CHECK(mcpwm_timer_start_stop(timer, MCPWM_TIMER_START_NO_STOP));
     }
 
-void servo_callback(void *arg)
+// Biến để theo dõi trạng thái khóa
+static bool door_locked = true;
+// Biến để theo dõi thời gian thẻ được lấy đi
+static TickType_t card_removed_time = 0;
+// Hằng số thời gian tự động đóng khóa sau khi thẻ được lấy đi (5 giây)
+#define AUTO_LOCK_DELAY_MS 5000
+
+void servo_task(void *arg)
 {
-    int angle = 0;
-    int step = 2;
+    // Khởi tạo servo
+    servo_initial();
+    
+    // Vòng lặp chính để kiểm tra trạng thái thẻ
     while (1) {
-        ESP_LOGI(TAG, "Angle of rotation: %d", angle);
-        ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(comparator, example_angle_to_compare(angle)));
-        //Add delay, since it takes time for servo to rotate, usually 200ms/60degree rotation under 5V power supply
-        vTaskDelay(pdMS_TO_TICKS(500));
-        if ((angle + step) > 60 || (angle + step) < -60) {
-            step *= -1;
+        // Kiểm tra xem có thẻ đang đặt trên đầu đọc không
+        if (card_present && card_valid) {
+            // Nếu cửa đang khóa, mở khóa ngay lập tức
+            if (door_locked) {
+                ESP_LOGI(TAG, "Mở khóa - Thẻ hợp lệ");
+                ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(comparator, angle_to_compare(90)));
+                vTaskDelay(500); // Đợi servo xoay
+                door_locked = false;
+            }
+        } else if (!card_present && !door_locked) {
+            // Nếu thẻ đã được lấy đi và cửa đang mở
+            if (card_removed_time == 0) {
+                // Lưu thời điểm thẻ được lấy đi
+                card_removed_time = xTaskGetTickCount();
+                ESP_LOGI(TAG, "Thẻ đã được lấy đi, sẽ tự động đóng khóa sau 5 giây");
+            } else {
+                // Kiểm tra xem đã đến lúc đóng khóa chưa
+                TickType_t current_time = xTaskGetTickCount();
+                if ((current_time - card_removed_time) >= pdMS_TO_TICKS(AUTO_LOCK_DELAY_MS)) {
+                    // Đóng khóa
+                    ESP_LOGI(TAG, "Tự động đóng khóa sau 5 giây");
+                    ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(comparator, angle_to_compare(0)));
+                    vTaskDelay(500); // Đợi servo xoay
+                    door_locked = true;
+                    card_removed_time = 0; // Reset thời gian
+                }
+            }
+        } else if (card_present && !card_valid) {
+            // Nếu thẻ không hợp lệ, đảm bảo cửa đang khóa
+            if (!door_locked) {
+                ESP_LOGI(TAG, "Đóng khóa - Thẻ không hợp lệ");
+                ESP_ERROR_CHECK(mcpwm_comparator_set_compare_value(comparator, angle_to_compare(0)));
+                vTaskDelay(500); // Đợi servo xoay
+                door_locked = true;
+            }
+            card_removed_time = 0; // Reset thời gian
         }
-        angle += step;
+        
+        // Đợi một khoảng thời gian ngắn trước khi kiểm tra lại
+        vTaskDelay(50); // Kiểm tra mỗi 50 ticks
     }
 }

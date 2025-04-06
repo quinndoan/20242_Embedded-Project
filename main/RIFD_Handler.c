@@ -4,6 +4,8 @@
 #include <esp_check.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "UARTHandler.h"
+#include "freertos/FreeRTOSConfig.h"
 
 static const char *TAG = "rc522_reading_card";
 //#define RC522_MIFARE_BLOCK_SIZE 16
@@ -30,6 +32,11 @@ rc522_spi_config_t driver_config = {
 
 // Biến lưu thẻ đang active, global
 rc522_picc_t *active_picc = NULL;
+// Biến để lưu trữ UID của thẻ hiện tại
+char current_uid[RC522_PICC_UID_STR_BUFFER_SIZE_MAX];
+// Biến để đánh dấu trạng thái thẻ
+extern bool card_present;
+extern bool card_valid;
 
 // Hàm khởi tạo NVS
 esp_err_t init_nvs(void)
@@ -223,31 +230,68 @@ void on_picc_state_changed(void *arg, esp_event_base_t base, int32_t event_id, v
     if (picc->state == RC522_PICC_STATE_ACTIVE) {
         ESP_LOGI(TAG, "Card detected - Type: %d", picc->type);
         active_picc = picc;
+        card_present = true;
         
         // Lưu UID vào biến global
-        char uid_buffer[RC522_PICC_UID_STR_BUFFER_SIZE_MAX];
-        if (rc522_picc_uid_to_str(&picc->uid, uid_buffer, sizeof(uid_buffer)) == ESP_OK) {
-            strncpy(g_uid, uid_buffer, sizeof(g_uid) - 1);
-            g_uid[sizeof(g_uid) - 1] = '\0';
-            ESP_LOGI(TAG, "Saved UID to global: %s", g_uid);
+        if (rc522_picc_uid_to_str(&picc->uid, current_uid, sizeof(current_uid)) == ESP_OK) {
+            ESP_LOGI(TAG, "Card UID: %s", current_uid);
+
+            // strcpy(g_uid, current_uid);
+            // save_rfid_data_to_nvs();
+            
+            // So sánh với g_uid
+            if (strcmp(current_uid, g_uid) == 0) {
+                ESP_LOGI(TAG, "Thẻ hợp lệ: %s", current_uid);
+                card_valid = true;
+                // Thực hiện các hành động khi thẻ hợp lệ
+                // Ví dụ: gửi thông báo, mở khóa, v.v.
+            } else {
+                ESP_LOGW(TAG, "Thẻ không hợp lệ: %s (Kỳ vọng: %s)", current_uid, g_uid);
+                card_valid = false;
+                // Thực hiện các hành động khi thẻ không hợp lệ
+                // Ví dụ: báo động, ghi log, v.v.
+            }
         }
-        
-        // Lưu ATQA vào biến global (chuyển thành chuỗi hex)
-        snprintf(g_atqa, sizeof(g_atqa), "%02X%02X", 
-                 (uint8_t)((picc->atqa.source >> 8) & 0xFF),
-                 (uint8_t)(picc->atqa.source & 0xFF));
-        ESP_LOGI(TAG, "Saved ATQA to global: %s", g_atqa);
-        
-        // Lưu SAK vào biến global (chuyển thành chuỗi hex)
-        snprintf(g_sak, sizeof(g_sak), "%02X", picc->sak);
-        ESP_LOGI(TAG, "Saved SAK to global: %s", g_sak);
-        
-        // Lưu dữ liệu vào NVS
-        save_rfid_data_to_nvs();
     }
     else if (picc->state == RC522_PICC_STATE_IDLE && event->old_state >= RC522_PICC_STATE_ACTIVE) {
         ESP_LOGI(TAG, "Card has been removed");
         active_picc = NULL;
+        card_present = false;
+        card_valid = false;
     }
 }
 
+void rfid_task(){
+    read_rfid_data_from_nvs();
+    // Start RC522
+    rc522_spi_create(&driver_config, &driver);
+    rc522_driver_install(driver);
+
+    rc522_config_t scanner_config = {
+        .driver = driver,
+    };
+
+    rc522_create(&scanner_config, &scanner);
+    rc522_register_events(scanner, RC522_EVENT_PICC_STATE_CHANGED, on_picc_state_changed, NULL);
+    rc522_start(scanner);
+    
+    // Vòng lặp chính để xử lý các hành động dựa trên trạng thái thẻ
+    while (1) {
+        // Chỉ xử lý các hành động dựa trên trạng thái thẻ, không truy cập trực tiếp vào RC522
+        if (card_present) {
+            if (card_valid) {
+                // Thực hiện các hành động khi thẻ hợp lệ
+                // Ví dụ: gửi thông báo qua UART, điều khiển thiết bị, v.v.
+                ESP_LOGI(TAG, "Card Valid");
+            } else {
+                ESP_LOGI(TAG, "Card Not Valid");
+                // Thực hiện các hành động khi thẻ không hợp lệ
+                // Ví dụ: báo động, ghi log, v.v.
+                // uart_write_bytes(UART_PORT, "Card invalid", strlen("Card invalid"));
+            }
+        }
+        
+        // Đợi một khoảng thời gian ngắn trước khi kiểm tra lại
+        vTaskDelay(50); // Kiểm tra mỗi 50 ticks
+    }
+}

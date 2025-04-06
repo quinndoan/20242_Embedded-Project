@@ -37,6 +37,7 @@ void on_picc_state_changed(void *arg, esp_event_base_t base, int32_t event_id, v
 esp_err_t hex_string_to_bytes(const char* hex_string, uint8_t* bytes, size_t max_len);
 // Thêm hàm mới để ghi dữ liệu vào thẻ RFID
 esp_err_t write_to_rfid_card(const char* data);
+void rfid_task();
 
 // Thêm biến lưu trữ thẻ đang active
 extern rc522_picc_t *active_picc;
