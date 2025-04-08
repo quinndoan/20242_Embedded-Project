@@ -11,8 +11,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "Pwm_servo.h"
+#include "WifiSTA.h"
 
-static const char *TAG = "rc522_reading_card";
+static const char *TAG = "main";
 
 bool card_present = false;
 bool card_valid = false;
@@ -28,12 +29,27 @@ void app_main()
    //servo_initial();
 
     ESP_ERROR_CHECK(init_nvs());
+
+    // setup wifi and telegram
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+
+    ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
+    wifi_init_sta();
+
+    // Đợi thêm 2 giây để đảm bảo kết nối ổn định
+    vTaskDelay(pdMS_TO_TICKS(2000));
     
     // Create tasks
    // xTaskCreate(rfid_task, "rfid_task", 1024*5, NULL, configMAX_PRIORITIES-1 , NULL);
     xTaskCreate(servo_task, "servo_task", 1024*4, NULL, configMAX_PRIORITIES-1, NULL);
     xTaskCreate(rfid_task, "rfid_task", 1024*5, NULL, configMAX_PRIORITIES-1 , NULL);
     xTaskCreate(rx_task, "uart_rx_task", 4096, NULL, configMAX_PRIORITIES-1, NULL);
+
+    // Create task for Telegram message sending
 
 }
 

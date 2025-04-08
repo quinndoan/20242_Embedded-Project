@@ -29,10 +29,11 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
 #define PREPARE_BUF_MAX_SIZE 1024
 
 #define MAX_BLE_DATA_LEN 256  // Kích thước tối đa bộ đệm dữ liệu BLE
-static char uid_buffer[20] = {0}; 
+
+static char ssid_buffer[20] = {0}; 
 static char password_buffer[20] = {0}; 
 
-bool is_uid_received = false;
+bool is_ssid_received = false;
 bool is_password_received = false;
 
 static uint8_t char1_str[] = {0x11, 0x22, 0x33};
@@ -654,51 +655,51 @@ void app_ble_set_data_recv_callback(void *cb)
     }
 }
 
-void ble_new_pass_received_callback(uint8_t *data, uint16_t length) {
-    // Nhận pass cũ (uid) trước khi nhận pass mới
-    if (!is_uid_received) {
-        strncpy(uid_buffer, (char *)data, length-1);
-        if (strcmp(uid_buffer, g_uid) != 0) {
-            ESP_LOGE(GATTS_TAG, "Password mismatch: %s != %s", uid_buffer, g_uid);
-            app_ble_send_data((uint8_t *)"Current password mismatch", 26);
-            is_uid_received = false;  // Đặt lại cờ để yêu cầu nhập lại 
-            return;
-        }
-        is_uid_received = true;
-        ESP_LOGI(GATTS_TAG, "UID received: %s", uid_buffer);
-        app_ble_send_data((uint8_t *)"Enter new password", 18);
-    }
-    // Nhận pass mới (password) sau khi nhận pass cũ
+// void ble_new_pass_received_callback(uint8_t *data, uint16_t length) {
+//     // Nhận pass cũ (uid) trước khi nhận pass mới
+//     if (!is_uid_received) {
+//         strncpy(uid_buffer, (char *)data, length-1);
+//         if (strcmp(uid_buffer, g_uid) != 0) {
+//             ESP_LOGE(GATTS_TAG, "Password mismatch: %s != %s", uid_buffer, g_uid);
+//             app_ble_send_data((uint8_t *)"Current password mismatch", 26);
+//             is_uid_received = false;  // Đặt lại cờ để yêu cầu nhập lại 
+//             return;
+//         }
+//         is_uid_received = true;
+//         ESP_LOGI(GATTS_TAG, "UID received: %s", uid_buffer);
+//         app_ble_send_data((uint8_t *)"Enter new password", 18);
+//     }
+//     // Nhận pass mới (password) sau khi nhận pass cũ
    
-    else if (is_uid_received && !is_password_received) {
-        strncpy(g_uid, (char *)data, length-1);
-        is_password_received = true;
-        ESP_LOGI(GATTS_TAG, "Password received: %s", g_uid);
-        app_ble_send_data((uint8_t *)"Password received, saving credentials...", 41);
+//     else if (is_uid_received && !is_password_received) {
+//         strncpy(g_uid, (char *)data, length-1);
+//         is_password_received = true;
+//         ESP_LOGI(GATTS_TAG, "Password received: %s", g_uid);
+//         app_ble_send_data((uint8_t *)"Password received, saving credentials...", 41);
 
-        // save into nvs
-        nvs_handle_t nvs_handle;
-        esp_err_t err;
+//         // save into nvs
+//         nvs_handle_t nvs_handle;
+//         esp_err_t err;
 
-        // Mở NVS handle
-        err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
-        if (err != ESP_OK) {
-            ESP_LOGE(GATTS_TAG "Error opening NVS handle: %s", esp_err_to_name(err));
-            return;
-        }
-        // Lưu dữ liệu
-        err = nvs_set_str(nvs_handle, NVS_KEY_UID, g_uid);
-        if (err != ESP_OK) {
-            ESP_LOGE(GATTS_TAG, "Error saving new BLE password: %s", esp_err_to_name(err));
-        }
-        // Đóng NVS sau khi hoàn thành
-        nvs_close(nvs_handle);
+//         // Mở NVS handle
+//         err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
+//         if (err != ESP_OK) {
+//             ESP_LOGE(GATTS_TAG "Error opening NVS handle: %s", esp_err_to_name(err));
+//             return;
+//         }
+//         // Lưu dữ liệu
+//         err = nvs_set_str(nvs_handle, NVS_KEY_UID, g_uid);
+//         if (err != ESP_OK) {
+//             ESP_LOGE(GATTS_TAG, "Error saving new BLE password: %s", esp_err_to_name(err));
+//         }
+//         // Đóng NVS sau khi hoàn thành
+//         nvs_close(nvs_handle);
 
-        // Gửi phản hồi BLE
-        char success_msg[] = "Update password successfully!";
-        app_ble_send_data((uint8_t *)success_msg, strlen(success_msg));
+//         // Gửi phản hồi BLE
+//         char success_msg[] = "Update password successfully!";
+//         app_ble_send_data((uint8_t *)success_msg, strlen(success_msg));
 
-        app_ble_stop();
+//         app_ble_stop();
 
-    }
-}
+//     }
+// }
