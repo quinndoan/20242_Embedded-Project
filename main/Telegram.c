@@ -1,6 +1,9 @@
 #include "WifiSTA.h"
 #include "esp_log.h"
 
+#define BOT_TOKEN "REMOVED"
+#define CHAT_ID "6166062022"
+
 static const char *TAG = "telegramBot";
 
 void send_telegram_message(const char *message) {
