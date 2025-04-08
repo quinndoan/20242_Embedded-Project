@@ -10,6 +10,8 @@
     "files.associations": {
         "*.embeddedhtml": "html",
         "rifd_handler.h": "c",
-        "rc522_picc.h": "c"
+        "rc522_picc.h": "c",
+        "esp_netif.h": "c",
+        "ssl.h": "c"
     }
 }

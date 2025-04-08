@@ -1,3 +1,19 @@
+#include <string.h>
+#include <ctype.h>
+#include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/event_groups.h"
+#include "esp_system.h"
+#include "esp_wifi.h"
+#include "esp_event.h"
+#include "esp_log.h"
+#include "nvs_flash.h"
+#include "esp_crt_bundle.h"
+#include "lwip/err.h"
+#include "lwip/sys.h"
+#include "esp_http_client.h"
+#include "esp_netif.h"
 #include "WifiSTA.h"
 #include "esp_log.h"
 #include "Global.h"
@@ -42,40 +58,11 @@ static EventGroupHandle_t s_wifi_event_group;
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
 
-// Hàm kiểm tra ký tự an toàn
-static int is_safe_char(unsigned char c) {
-    return (c >= 'a' && c <= 'z') ||
-           (c >= 'A' && c <= 'Z') ||
-           (c >= '0' && c <= '9') ||
-           c == '-' || c == '_' || c == '.' || c == '~';
-}
-
-// Hàm encode URL
-static void url_encode(const char *str, char *encoded, size_t max_len) {
-    char *p = encoded;
-    const char *s = str;
-    
-    while (*s != '\0' && (p - encoded) < max_len - 1) {
-        unsigned char c = (unsigned char)*s;
-        if (is_safe_char(c)) {
-            *p++ = c;
-        } else if (c == ' ') {
-            *p++ = '+';
-        } else {
-            if ((p - encoded) + 3 < max_len) {
-                *p++ = '%';
-                p += snprintf(p, max_len - (p - encoded), "%02X", c);
-            }
-        }
-        s++;
-    }
-    *p = '\0';
-}
 
 static int s_retry_num = 0;
 
 
-void event_handler(void* arg, esp_event_base_t event_base,
+static void event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
@@ -84,14 +71,14 @@ void event_handler(void* arg, esp_event_base_t event_base,
         if (s_retry_num < EXAMPLE_ESP_MAXIMUM_RETRY) {
             esp_wifi_connect();
             s_retry_num++;
-            ESP_LOG(TAG, "retry to connect to the AP");
+            ESP_LOGD(TAG, "retry to connect to the AP");
         } else {
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
         }
-        ESP_LOG(TAG,"connect to the AP fail");
+        ESP_LOGD(TAG,"connect to the AP fail");
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
-        ESP_LOG(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
+        ESP_LOGD(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
@@ -140,7 +127,7 @@ void wifi_init_sta(void)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
     ESP_ERROR_CHECK(esp_wifi_start() );
 
-    ESP_LOG(TAG, "wifi_init_sta finished.");
+    ESP_LOGD(TAG, "wifi_init_sta finished.");
 
     /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
      * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
@@ -153,10 +140,10 @@ void wifi_init_sta(void)
     /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually
      * happened. */
     if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOG(TAG, "connected to ap ");
+        ESP_LOGD(TAG, "connected to ap ");
     } else if (bits & WIFI_FAIL_BIT) {
-        ESP_LOG(TAG, "Failed to connect ");
+        ESP_LOGD(TAG, "Failed to connect ");
     } else {
-        ESP_LOG(TAG, "UNEXPECTED EVENT");
+        ESP_LOGD(TAG, "UNEXPECTED EVENT");
     }
 }

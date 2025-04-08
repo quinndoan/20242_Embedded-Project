@@ -12,7 +12,7 @@
 #include "freertos/task.h"
 #include "Pwm_servo.h"
 #include "WifiSTA.h"
-
+#include "Telegram.h"
 static const char *TAG = "main";
 
 bool card_present = false;
@@ -28,7 +28,8 @@ void app_main()
    initialize_uart();
    //servo_initial();
 
-    ESP_ERROR_CHECK(init_nvs());
+   // ESP_ERROR_CHECK(init_nvs());
+    esp_err_t ret = nvs_flash_init();
 
     // setup wifi and telegram
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -50,7 +51,7 @@ void app_main()
     xTaskCreate(rx_task, "uart_rx_task", 4096, NULL, configMAX_PRIORITIES-1, NULL);
 
     // Create task for Telegram message sending
-
+    xTaskCreate(telegram_notification_task, "telegram_task", 1024*6, NULL, configMAX_PRIORITIES-1, NULL);
 }
 
 
