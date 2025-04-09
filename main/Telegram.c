@@ -21,8 +21,8 @@
 #include "RIFD_Handler.h"
 #include "Telegram.h"
 
-#define BOT_TOKEN "REMOVED"
-#define CHAT_ID "6166062022"
+#define BOT_TOKEN ""
+#define CHAT_ID ""
 
 static const char *TAG = "telegramBot";
 
