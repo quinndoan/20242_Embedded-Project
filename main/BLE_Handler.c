@@ -4,14 +4,16 @@
 #include "esp_bt_defs.h"
 #include "esp_bt_main.h"
 #include "esp_gatt_common_api.h"
-#include "BLE.h"
+#include "BLE_Handler.h"
 #include "sdkconfig.h"
 #include "nvs_flash.h"
 #include "Global.h"
+#include "WifiSTA.h"
 
-
-#define GATTS_TAG "GATTS_DEMO"
-
+static const char *GATTS_TAG = "BLE";
+extern char g_ssid;
+extern char g_password;
+extern bool is_wifi_connected;
 
 /// Declare the static function
 static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param);
@@ -32,9 +34,6 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
 
 static char ssid_buffer[20] = {0}; 
 static char password_buffer[20] = {0}; 
-
-bool is_ssid_received = false;
-bool is_password_received = false;
 
 static uint8_t char1_str[] = {0x11, 0x22, 0x33};
 static esp_gatt_char_prop_t a_property = 0;
@@ -655,51 +654,42 @@ void app_ble_set_data_recv_callback(void *cb)
     }
 }
 
-// void ble_new_pass_received_callback(uint8_t *data, uint16_t length) {
-//     // Nhận pass cũ (uid) trước khi nhận pass mới
-//     if (!is_uid_received) {
-//         strncpy(uid_buffer, (char *)data, length-1);
-//         if (strcmp(uid_buffer, g_uid) != 0) {
-//             ESP_LOGE(GATTS_TAG, "Password mismatch: %s != %s", uid_buffer, g_uid);
-//             app_ble_send_data((uint8_t *)"Current password mismatch", 26);
-//             is_uid_received = false;  // Đặt lại cờ để yêu cầu nhập lại 
-//             return;
-//         }
-//         is_uid_received = true;
-//         ESP_LOGI(GATTS_TAG, "UID received: %s", uid_buffer);
-//         app_ble_send_data((uint8_t *)"Enter new password", 18);
-//     }
-//     // Nhận pass mới (password) sau khi nhận pass cũ
-   
-//     else if (is_uid_received && !is_password_received) {
-//         strncpy(g_uid, (char *)data, length-1);
-//         is_password_received = true;
-//         ESP_LOGI(GATTS_TAG, "Password received: %s", g_uid);
-//         app_ble_send_data((uint8_t *)"Password received, saving credentials...", 41);
+void ble_data_received_callback(uint8_t *data, uint16_t length) {
+    char received_data[length + 1];
+    memcpy(received_data, data, length);
+    received_data[length] = '\0';
+    
+    ESP_LOGI(GATTS_TAG, "Received BLE data: %s", received_data);
+    
+    // Parse the received data
+    if (strstr(received_data, "SSID:") != NULL) {
+        char *ssid = received_data + 5; // Skip "SSID:"
+        ble_set_wifi_credentials(ssid, NULL);
+    } else if (strstr(received_data, "PASS:") != NULL) {
+        char *pass = received_data + 5; // Skip "PASS:"
+        ble_set_wifi_credentials(NULL, pass);
+    }
+}
 
-//         // save into nvs
-//         nvs_handle_t nvs_handle;
-//         esp_err_t err;
-
-//         // Mở NVS handle
-//         err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
-//         if (err != ESP_OK) {
-//             ESP_LOGE(GATTS_TAG "Error opening NVS handle: %s", esp_err_to_name(err));
-//             return;
-//         }
-//         // Lưu dữ liệu
-//         err = nvs_set_str(nvs_handle, NVS_KEY_UID, g_uid);
-//         if (err != ESP_OK) {
-//             ESP_LOGE(GATTS_TAG, "Error saving new BLE password: %s", esp_err_to_name(err));
-//         }
-//         // Đóng NVS sau khi hoàn thành
-//         nvs_close(nvs_handle);
-
-//         // Gửi phản hồi BLE
-//         char success_msg[] = "Update password successfully!";
-//         app_ble_send_data((uint8_t *)success_msg, strlen(success_msg));
-
-//         app_ble_stop();
-
-//     }
-// }
+void ble_set_wifi_credentials(const char* ssid, const char* password)
+{
+    if (ssid != NULL) {
+        strncpy(g_ssid, ssid, sizeof(g_ssid) - 1);
+    }
+    if (password != NULL) {
+        strncpy(g_password, password, sizeof(g_password) - 1);
+    }
+    
+    // If both SSID and password are set, try to connect to WiFi
+    if (strlen(g_ssid) > 0 && strlen(g_password) > 0) {
+        if (wifi_init_sta == ESP_OK){
+            is_wifi_connected = true;
+            ESP_LOG(GATTS_TAG, "Wifi connected sucessfully");
+        }
+        else{
+            is_wifi_connected = false;
+            ESP_LOG(GATTS_TAG, "Wifi failed with received BLE");
+        }
+     
+    }
+} 

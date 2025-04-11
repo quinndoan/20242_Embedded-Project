@@ -60,7 +60,8 @@ static EventGroupHandle_t s_wifi_event_group;
 
 
 static int s_retry_num = 0;
-
+extern char g_ssid[20];
+extern char g_password[20];
 
 static void event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
@@ -84,7 +85,7 @@ static void event_handler(void* arg, esp_event_base_t event_base,
     }
 }
 
-void wifi_init_sta(void)
+esp_err_t wifi_init_sta(void)
 {
     s_wifi_event_group = xEventGroupCreate();
 
@@ -111,18 +112,15 @@ void wifi_init_sta(void)
 
     wifi_config_t wifi_config = {
         .sta = {
-            .ssid = "Quinn",
-            .password = "20002000",
-            /* Authmode threshold resets to WPA2 as default if password matches WPA2 standards (password len => 8).
-             * If you want to connect the device to deprecated WEP/WPA networks, Please set the threshold value
-             * to WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK and set the password with length and format matching to
-             * WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK standards.
-             */
-           // .threshold.authmode = ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD,
-          //  .sae_pwe_h2e = ESP_WIFI_SAE_MODE,
-           // .sae_h2e_identifier = EXAMPLE_H2E_IDENTIFIER,
+            .ssid = {0},
+            .password = {0},
         },
     };
+    
+    // Copy SSID and password to wifi_config
+    memcpy(wifi_config.sta.ssid, g_ssid, strlen(g_ssid));
+    memcpy(wifi_config.sta.password, g_password, strlen(g_password));
+
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
     ESP_ERROR_CHECK(esp_wifi_start() );
@@ -141,9 +139,12 @@ void wifi_init_sta(void)
      * happened. */
     if (bits & WIFI_CONNECTED_BIT) {
         ESP_LOGD(TAG, "connected to ap ");
+        return ESP_OK;
     } else if (bits & WIFI_FAIL_BIT) {
         ESP_LOGD(TAG, "Failed to connect ");
+       // return ESP_FAIL;
     } else {
         ESP_LOGD(TAG, "UNEXPECTED EVENT");
     }
+    return ESP_FAIL;
 }
